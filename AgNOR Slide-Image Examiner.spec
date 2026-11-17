@@ -5,10 +5,10 @@ block_cipher = None
 
 
 a = Analysis(
-    ['mask_generator.py'],
+    ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('icon.ico', '.'), ('AgNOR_DenseNet-169_LinkNet_1920x2560x3.h5', '.')],
+    datas=[('icon.ico', '.'), ('Papanicolaou_DenseNet-169_LinkNet_TSS_544x960x3.h5', '.')],
     hiddenimports=['tensorflow'],
     hookspath=[],
     hooksconfig={},
@@ -28,7 +28,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='AgNOR Slide-Image Examiner',
+    name='Papanicolaou Slide-Image Examiner',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

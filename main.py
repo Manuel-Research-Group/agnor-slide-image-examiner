@@ -4,6 +4,7 @@ import logging
 import os
 import time
 from pathlib import Path
+import csv
 
 import cv2
 import numpy as np
@@ -19,6 +20,93 @@ from utils.model import load_model
 from utils.utils import (DEFAULT_MODEL_INPUT_SHAPE, MODEL_PATH,
                          collapse_probabilities, get_hash_file,
                          open_with_labelme, pad_along_axis)
+
+
+def analyze_tables(nuclei, cytoplasm, output):
+    columns = [
+        'patient_record',
+        'patient_name',
+        'group',
+        'exam_date',
+        'exam_instance',
+        'datetime'
+    ]
+
+    number_of_cells = {
+        'normal': 0,
+        'suspeita': 0
+    }
+
+    # Read inputs CSV
+    with open(cytoplasm, 'r', newline='', encoding='utf-8') as cytoplasm_file:
+        with open(nuclei, 'r', newline='', encoding='utf-8') as nuclei_file:
+            nuclei_reader = csv.DictReader(nuclei_file)
+            cytoplasm_reader = csv.DictReader(cytoplasm_file)
+
+            # Read the first rows
+            nuclei_first_row = next(nuclei_reader, None)
+            cytoplasm_first_row = next(cytoplasm_reader, None)
+
+            if (nuclei_first_row is None) or (cytoplasm_first_row is None):
+                raise ValueError("One of the input CSV is empty.")
+
+            # Extract the requested fields
+            result = {column: nuclei_first_row[column] for column in columns}
+
+            nuclei_file.seek(0)
+            cytoplasm_file.seek(0)
+            nuclei_reader = csv.DictReader(nuclei_file)
+            cytoplasm_reader = csv.DictReader(cytoplasm_file)
+
+            nucleus_pixel_count = 0
+            cytoplasm_pixel_count = 0
+
+            for row in nuclei_reader:
+                value = row['type'].strip().lower()
+
+                if value in ('intermediaria', 'superficial'):
+                    number_of_cells['normal'] += 1
+
+                elif value in ('suspeita'):
+                    number_of_cells['suspeita'] += 1
+
+                nucleus_pixel_count += float(row['nucleus_pixel_count'])
+
+            for row in cytoplasm_reader:
+                cytoplasm_pixel_count += float(row['cluster_pixel_count'])
+
+            result['number_of_normal_cells'] = number_of_cells['normal']
+            result['number_of_suspect_cells'] = number_of_cells['suspeita']
+
+            result['normal_cells_%'] = "{:.2f}".format(number_of_cells['normal']*100 / (number_of_cells['normal'] + number_of_cells['suspeita']))
+            result['suspect_cells_%'] = "{:.2f}".format(number_of_cells['suspeita']*100 / (number_of_cells['normal'] + number_of_cells['suspeita']))
+
+            result['mean_nucleus_pixel_count'] = "{:.2f}".format(nucleus_pixel_count / (number_of_cells['normal'] + number_of_cells['suspeita']))
+            result['mean_cytoplasm_pixel_count'] = "{:.2f}".format(cytoplasm_pixel_count / (number_of_cells['normal'] + number_of_cells['suspeita']))
+            result['cytoplasm_nucleus_ratio'] = "{:.2f}".format(float(result['mean_cytoplasm_pixel_count']) / float(result['mean_nucleus_pixel_count']))
+
+
+            columns = [
+            'patient_record',
+            'patient_name',
+            'group',
+            'exam_date',
+            'exam_instance',
+            'number_of_normal_cells',
+            'number_of_suspect_cells',
+            'normal_cells_%',
+            'suspect_cells_%',
+            'mean_nucleus_pixel_count',
+            'mean_cytoplasm_pixel_count',
+            'cytoplasm_nucleus_ratio',
+            'datetime'
+        ]
+
+        # Write output CSV
+        with open(output, 'w', newline='', encoding='utf-8') as outfile:
+            writer = csv.DictWriter(outfile, fieldnames=columns)
+            writer.writeheader()
+            writer.writerow(result)
 
 
 def main():
@@ -507,6 +595,13 @@ def main():
                                 database=database,
                                 datetime=datetime)
                             logging.debug(f"Measurements aggregation complete")
+                            print('oi')
+
+                            analyze_tables(
+                                str(output_directory.joinpath(f"nuclei_{datetime}.csv")),
+                                str(output_directory.joinpath(f"cluster_cytoplasm_anucleate_{datetime}.csv")),
+                                str(output_directory.joinpath(f"aggregate_{datetime}.csv"))
+                            )
 
                             if not console_mode:
                                 if not aggregation_result:
